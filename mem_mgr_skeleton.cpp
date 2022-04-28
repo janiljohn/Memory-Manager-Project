@@ -118,17 +118,47 @@ void summarize(size_t pg_faults, size_t tlb_hits) {
     printf("\n\t\t...done.\n");
 }
 
-void tlb_add(int index, page_node entry) { }  // TODO
+void tlb_add(int index, page_node entry) {
+       tlb[index%16] = entry;
+ }
 
-void tlb_remove(int index) { }  // TODO
+void tlb_remove(int index) {
+    for(int x = index; x<(sizeof(tlb)/sizeof(tlb[0]))-1; x++){
+        tlb[x] = tlb[x+1];
+    }
+}
 
-void tlb_hit(size_t& frame, size_t& page, size_t& tlb_hits, int result) {  }  // TODO
+void tlb_hit(size_t& frame, size_t& page, size_t& tlb_hits, int result) { 
+    result++;
+ } 
 
-void tlb_miss(size_t& frame, size_t& page, size_t& tlb_track) { } // TODO
+void tlb_miss(size_t& frame, size_t& page, size_t& tlb_track) { 
+    for(int x = 0; x<256; x++){
+        if(pg_table[x].frame_num==frame && pg_table[x].npage==page){
+            tlb[tlb_track] = pg_table[x];
+        }
+    }
+ }
 
-void fifo_replace_page(size_t& frame ) { }   // TODO
+void fifo_replace_page(size_t& frame ) { 
+    for(int x = 0; x<(sizeof(tlb)/sizeof(tlb[0]))-1; x++){
+        pg_table[x] = pg_table[x+1];
+    }
+ }  
 
-void lru_replace_page(size_t& frame) { } // TODO
+void lru_replace_page(size_t& frame) {
+    int i = 0;
+    for(int x = 0; x<PTABLE_SIZE; x++){
+        if(pg_table[x].frame_num==frame){
+            i = x;
+            break;
+        }
+    }
+
+    for(int y = i; y<PTABLE_SIZE-1; y++){
+        pg_table[i] = pg_table[i+1];
+    }
+}
 
 void page_fault(size_t& frame, size_t& page, size_t& frames_used, size_t& pg_faults, 
               size_t& tlb_track, FILE* fbacking) {  
@@ -141,10 +171,11 @@ void page_fault(size_t& frame, size_t& page, size_t& frames_used, size_t& pg_fau
     frame = frames_used % NFRAMES;    // FIFO only
 
     if (is_memfull) { 
-        // if (REPLACE_POLICY == FIFO) {  // TODO
-        // } else { 
-        //     // TODO
-        // }
+        if (REPLACE_POLICY == FIFO) {
+            fifo_replace_page(frame);
+        } else { 
+            lru_replace_page(frame);
+        }
     }
          // load page into RAM, update pg_table, TLB
     fseek(fbacking, page * FRAME_SIZE, SEEK_SET);
@@ -180,7 +211,7 @@ void check_address_value(size_t logic_add, size_t page, size_t offset, size_t ph
 }
 
 void run_simulation() { 
-        // addresses, pages, frames, values, hits and faults
+    // size_t addresses, pages, frames, values, hits and faults
     size_t logic_add, virt_add, phys_add, physical_add;
     size_t page, frame, offset, value, prev_frame = 0, tlb_track = 0;
     size_t frames_used = 0, pg_faults = 0, tlb_hits = 0;
@@ -218,6 +249,7 @@ void run_simulation() {
     close_files(faddress, fcorrect, fbacking);  // and time to wrap things up
     free(ram);
     summarize(pg_faults, tlb_hits);
+
 }
 
 
@@ -226,3 +258,53 @@ int main(int argc, const char * argv[]) {
 // printf("\nFailed asserts: %lu\n\n", failed_asserts);   // allows asserts to fail silently and be counted
     return 0;
 }
+
+/*
+
+log: 16916 0x4214 (pg: 66, off: 20)-->phy:    20 (frm:   0) (prv:   0)--> val:    0 == value:    0 --  + ----> pg_fault
+log: 62493 0xf41d (pg:244, off: 29)-->phy:   285 (frm:   1) (prv:   0)--> val:    0 == value:    0 --  + ----> pg_fault
+log: 30198 0x75f6 (pg:117, off:246)-->phy:   758 (frm:   2) (prv:   1)--> val:   29 == value:   29 --  + ----> pg_fault
+log: 53683 0xd1b3 (pg:209, off:179)-->phy:   947 (frm:   3) (prv:   2)--> val:  108 == value:  108 --  + ----> pg_fault
+log: 40185 0x9cf9 (pg:156, off:249)-->phy:  1273 (frm:   4) (prv:   3)--> val:    0 == value:    0 --  + ----> pg_fault
+
+log: 28781 0x706d (pg:112, off:109)-->phy:  1389 (frm:   5) (prv:   4)--> val:    0 == value:    0 --  + ----> pg_fault
+log: 24462 0x5f8e (pg: 95, off:142)-->phy:  1678 (frm:   6) (prv:   5)--> val:   23 == value:   23 --  + ----> pg_fault
+log: 48399 0xbd0f (pg:189, off: 15)-->phy:  1807 (frm:   7) (prv:   6)--> val:   67 == value:   67 --  + ----> pg_fault
+log: 64815 0xfd2f (pg:253, off: 47)-->phy:  2095 (frm:   8) (prv:   7)--> val:   75 == value:   75 --  + ----> pg_fault
+log: 18295 0x4777 (pg: 71, off:119)-->phy:  2423 (frm:   9) (prv:   8)--> val:  -35 == value:  -35 --  + ----> pg_fault
+
+log: 12218 0x2fba (pg: 47, off:186)-->phy:  2746 (frm:  10) (prv:   9)--> val:   11 == value:   11 --  + ----> pg_fault
+log: 22760 0x58e8 (pg: 88, off:232)-->phy:  3048 (frm:  11) (prv:  10)--> val:    0 == value:    0 --  + ----> pg_fault
+log: 57982 0xe27e (pg:226, off:126)-->phy:  3198 (frm:  12) (prv:  11)--> val:   56 == value:   56 --  + ----> pg_fault
+log: 27966 0x6d3e (pg:109, off: 62)-->phy:  3390 (frm:  13) (prv:  12)--> val:   27 == value:   27 --  + ----> pg_fault
+log: 54894 0xd66e (pg:214, off:110)-->phy:  3694 (frm:  14) (prv:  13)--> val:   53 == value:   53 --  + ----> pg_fault
+
+
+........
+
+
+log: 10392 0x2898 (pg: 40, off:152)-->phy: 14744 (frm:  57) (prv:  56)--> val:    0 == value:    0 --  + ----> HIT!
+log: 58882 0xe602 (pg:230, off:  2)-->phy: 14850 (frm:  58) (prv:  57)--> val:   57 == value:   57 --  + ----> HIT!
+log:  5129 0x1409 (pg: 20, off:  9)-->phy: 15113 (frm:  59) (prv:  58)--> val:    0 == value:    0 --  + ----> HIT!
+log: 58554 0xe4ba (pg:228, off:186)-->phy: 15546 (frm:  60) (prv:  59)--> val:   57 == value:   57 --  + ----> HIT!
+log: 58584 0xe4d8 (pg:228, off:216)-->phy: 15576 (frm:  60) (prv:  60)--> val:    0 == value:    0 --  + ----> HIT!
+
+log: 27444 0x6b34 (pg:107, off: 52)-->phy: 15668 (frm:  61) (prv:  60)--> val:    0 == value:    0 --  + ----> HIT!
+log: 58982 0xe666 (pg:230, off:102)-->phy: 15718 (frm:  61) (prv:  61)--> val:   26 == value:   57 -- fail----> HIT!
+log: 51476 0xc914 (pg:201, off: 20)-->phy: 15892 (frm:  62) (prv:  61)--> val:    0 == value:    0 --  + ----> HIT!
+log:  6796 0x1a8c (pg: 26, off:140)-->phy: 16012 (frm:  62) (prv:  62)--> val:    0 == value:    0 --  + ----> HIT!
+log: 21311 0x533f (pg: 83, off: 63)-->phy: 15935 (frm:  62) (prv:  62)--> val:   79 == value:  -49 -- fail----> HIT!
+
+log: 30705 0x77f1 (pg:119, off:241)-->phy: 16369 (frm:  63) (prv:  62)--> val:    0 == value:    0 --  + ----> HIT!
+log: 28964 0x7124 (pg:113, off: 36)-->phy: 16420 (frm:  64) (prv:  63)--> val:    0 == value:    0 --  + ----> HIT!
+log: 41003 0xa02b (pg:160, off: 43)-->phy: 16427 (frm:  64) (prv:  64)--> val:   74 == value:   10 -- fail----> HIT!
+
+Page Fault Percentage: 0.196%
+TLB Hit Percentage: 0.069%
+
+ALL logical ---> physical assertions PASSED!
+
+                ...done.
+
+
+*/
