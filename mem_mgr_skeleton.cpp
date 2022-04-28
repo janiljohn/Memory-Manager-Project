@@ -1,3 +1,6 @@
+// Joel Anil John, Indrajeet Patwardhan, Danyal Nemati
+
+
 //  mem_mgr.cpp
 //
 #include <stdio.h>
